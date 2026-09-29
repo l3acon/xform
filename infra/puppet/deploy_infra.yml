@@ -1,0 +1,9 @@
+---
+# deploy_infra.yml — Provision AWS infrastructure for Puppet lab
+- name: Provision AWS infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  roles:
+    - infra

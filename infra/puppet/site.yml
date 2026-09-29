@@ -1,0 +1,29 @@
+---
+# site.yml — End-to-end: provision infra, then configure Puppet master + agents
+#
+# Usage:
+#   ansible-playbook site.yml
+#
+# This playbook:
+#   1. Provisions AWS infrastructure (VPC, SG, EC2 instances, DNS)
+#   2. Configures the Puppet master (installs puppetserver, deploys manifests)
+#   3. Configures Puppet agents (installs puppet-agent, registers with master)
+
+- name: Provision AWS infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - infra
+
+- name: Configure Puppet Master
+  hosts: puppet_master
+  gather_facts: true
+  roles:
+    - puppet_master
+
+- name: Configure Puppet Agents
+  hosts: puppet_agents
+  gather_facts: true
+  roles:
+    - puppet_agent

@@ -1,0 +1,86 @@
+---
+# Role: puppet_master
+# Installs and configures Puppet Server on RHEL 9
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ puppet_master_hostname }}"
+
+- name: Add puppet master to /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ private_ip }} {{ puppet_master_fqdn }} {{ puppet_master_hostname }} puppet"
+    state: present
+
+- name: Install Puppet 8 release repository
+  ansible.builtin.dnf:
+    name: "https://yum.puppet.com/puppet{{ puppet_version }}-release-el-9.noarch.rpm"
+    state: present
+    disable_gpg_check: true
+
+- name: Install Puppet Server
+  ansible.builtin.dnf:
+    name:
+      - puppetserver
+      - puppet-agent
+    state: present
+
+- name: Configure Puppet Server memory allocation
+  ansible.builtin.lineinfile:
+    path: /etc/sysconfig/puppetserver
+    regexp: '^JAVA_ARGS='
+    line: 'JAVA_ARGS="-Xms1g -Xmx1g -Djruby.logger.class=com.puppetlabs.jruby_utils.jruby.Slf4jLogger"'
+
+- name: Deploy puppet.conf for master
+  ansible.builtin.template:
+    src: puppet.conf.j2
+    dest: /etc/puppetlabs/puppet/puppet.conf
+    owner: puppet
+    group: puppet
+    mode: "0644"
+  notify: restart puppetserver
+
+- name: Configure autosign for lab environment
+  ansible.builtin.template:
+    src: autosign.conf.j2
+    dest: /etc/puppetlabs/puppet/autosign.conf
+    owner: puppet
+    group: puppet
+    mode: "0644"
+  notify: restart puppetserver
+
+- name: Create site.pp manifest directory
+  ansible.builtin.file:
+    path: /etc/puppetlabs/code/environments/production/manifests
+    state: directory
+    owner: puppet
+    group: puppet
+    mode: "0755"
+
+- name: Deploy a basic site.pp manifest
+  ansible.builtin.template:
+    src: site.pp.j2
+    dest: /etc/puppetlabs/code/environments/production/manifests/site.pp
+    owner: puppet
+    group: puppet
+    mode: "0644"
+
+- name: Ensure Puppet Server is enabled and started
+  ansible.builtin.systemd:
+    name: puppetserver
+    enabled: true
+    state: started
+
+- name: Wait for Puppet Server to be listening on port 8140
+  ansible.builtin.wait_for:
+    port: 8140
+    delay: 5
+    timeout: 120
+
+- name: Open firewall for Puppet (port 8140)
+  ansible.posix.firewalld:
+    port: 8140/tcp
+    permanent: true
+    immediate: true
+    state: enabled
+  ignore_errors: true

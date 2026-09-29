@@ -1,0 +1,6 @@
+*.retry
+.aws.yaml
+*.pyc
+__pycache__/
+.vagrant/
+*.log

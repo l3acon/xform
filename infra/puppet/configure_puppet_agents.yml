@@ -1,0 +1,8 @@
+---
+# configure_puppet_agents.yml — Install puppet-agent and register with master
+- name: Configure Puppet Agents
+  hosts: puppet_agents
+  gather_facts: true
+
+  roles:
+    - puppet_agent

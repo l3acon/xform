@@ -1,0 +1,5 @@
+---
+- name: restart puppetserver
+  ansible.builtin.systemd:
+    name: puppetserver
+    state: restarted

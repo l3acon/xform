@@ -1,0 +1,14 @@
+# site.pp — default node classification
+# This is a starter manifest; Puppet code to be translated to Ansible goes here.
+
+node default {
+  notify { 'xform-hello':
+    message => "Hello from Puppet on ${facts['networking']['fqdn']}! This node is managed by the xform puppet master.",
+  }
+
+  # Ensure a marker file exists to prove Puppet applied
+  file { '/tmp/puppet-managed.txt':
+    ensure  => file,
+    content => "This host is managed by Puppet.\nHostname: ${facts['networking']['hostname']}\nApplied: ${facts['system_uptime']['uptime']}\n",
+  }
+}

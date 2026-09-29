@@ -1,0 +1,53 @@
+---
+# Role: puppet_agent
+# Installs puppet-agent and registers with the Puppet master
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "agent-{{ inventory_hostname | regex_replace('\\.', '-') }}"
+
+- name: Add puppet master to /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ hostvars[groups['puppet_master'][0]]['private_ip'] }} {{ puppet_master_fqdn }} {{ puppet_master_hostname }} puppet"
+    state: present
+
+- name: Add own private IP to /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ private_ip }} {{ inventory_hostname }}"
+    state: present
+
+- name: Install Puppet 8 release repository
+  ansible.builtin.dnf:
+    name: "https://yum.puppet.com/puppet{{ puppet_version }}-release-el-9.noarch.rpm"
+    state: present
+    disable_gpg_check: true
+
+- name: Install puppet-agent
+  ansible.builtin.dnf:
+    name: puppet-agent
+    state: present
+
+- name: Deploy puppet.conf for agent
+  ansible.builtin.template:
+    src: puppet.conf.j2
+    dest: /etc/puppetlabs/puppet/puppet.conf
+    mode: "0644"
+
+- name: Ensure Puppet agent is enabled and started
+  ansible.builtin.systemd:
+    name: puppet
+    enabled: true
+    state: started
+
+- name: Run Puppet agent to register with master and apply catalog
+  ansible.builtin.command:
+    cmd: /opt/puppetlabs/bin/puppet agent --test --waitforcert 30
+  register: puppet_run
+  changed_when: puppet_run.rc == 2
+  failed_when: puppet_run.rc not in [0, 2]
+
+- name: Show Puppet agent run output
+  ansible.builtin.debug:
+    var: puppet_run.stdout_lines

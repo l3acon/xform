@@ -1,0 +1,261 @@
+---
+# Role: infra
+# Provisions AWS resources: VPC, subnet, IGW, security group, key pair, EC2 instances
+
+- name: Generate SSH key pair if it doesn't exist
+  delegate_to: localhost
+  become: false
+  community.crypto.openssh_keypair:
+    path: "~/.ssh/{{ key_pair_name }}"
+    type: ed25519
+    comment: "{{ project_tag }}"
+  register: ssh_key
+
+- name: Look up RHEL 9 AMI
+  amazon.aws.ec2_ami_info:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    owners:
+      - "{{ rhel9_ami_owner }}"
+    filters:
+      name: "{{ rhel9_ami_name_filter }}"
+      architecture: x86_64
+      state: available
+  register: rhel9_amis
+  delegate_to: localhost
+  become: false
+
+- name: Set AMI ID to the latest RHEL 9 image
+  ansible.builtin.set_fact:
+    rhel9_ami_id: "{{ (rhel9_amis.images | sort(attribute='creation_date') | last).image_id }}"
+
+- name: Create VPC
+  amazon.aws.ec2_vpc_net:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    name: "{{ project_tag }}-vpc"
+    cidr_block: "{{ vpc_cidr }}"
+    tags:
+      Project: "{{ project_tag }}"
+  register: vpc
+  delegate_to: localhost
+  become: false
+
+- name: Create internet gateway
+  amazon.aws.ec2_vpc_igw:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpc.vpc.id }}"
+    tags:
+      Name: "{{ project_tag }}-igw"
+      Project: "{{ project_tag }}"
+  register: igw
+  delegate_to: localhost
+  become: false
+
+- name: Create subnet
+  amazon.aws.ec2_vpc_subnet:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpc.vpc.id }}"
+    cidr: "{{ subnet_cidr }}"
+    az: "{{ availability_zone }}"
+    map_public: true
+    tags:
+      Name: "{{ project_tag }}-subnet"
+      Project: "{{ project_tag }}"
+  register: subnet
+  delegate_to: localhost
+  become: false
+
+- name: Create route table with internet access
+  amazon.aws.ec2_vpc_route_table:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    vpc_id: "{{ vpc.vpc.id }}"
+    subnets:
+      - "{{ subnet.subnet.id }}"
+    routes:
+      - dest: "0.0.0.0/0"
+        gateway_id: "{{ igw.gateway_id }}"
+    tags:
+      Name: "{{ project_tag }}-rt"
+      Project: "{{ project_tag }}"
+  delegate_to: localhost
+  become: false
+
+- name: Create security group
+  amazon.aws.ec2_security_group:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    name: "{{ project_tag }}-sg"
+    description: "Security group for Puppet master and agents"
+    vpc_id: "{{ vpc.vpc.id }}"
+    rules:
+      - proto: tcp
+        ports: 22
+        cidr_ip: "0.0.0.0/0"
+        rule_desc: "SSH"
+      - proto: tcp
+        ports: 8140
+        cidr_ip: "{{ vpc_cidr }}"
+        rule_desc: "Puppet master"
+      - proto: tcp
+        ports: 443
+        cidr_ip: "0.0.0.0/0"
+        rule_desc: "HTTPS"
+      - proto: icmp
+        from_port: -1
+        to_port: -1
+        cidr_ip: "{{ vpc_cidr }}"
+        rule_desc: "ICMP within VPC"
+    rules_egress:
+      - proto: all
+        cidr_ip: "0.0.0.0/0"
+    tags:
+      Project: "{{ project_tag }}"
+  register: sg
+  delegate_to: localhost
+  become: false
+
+- name: Import SSH key pair to AWS
+  amazon.aws.ec2_key:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    name: "{{ key_pair_name }}"
+    key_material: "{{ lookup('file', '~/.ssh/' + key_pair_name + '.pub') }}"
+    tags:
+      Project: "{{ project_tag }}"
+  delegate_to: localhost
+  become: false
+
+- name: Launch Puppet master EC2 instance
+  amazon.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    name: "{{ project_tag }}-master"
+    instance_type: "{{ puppet_master_instance_type }}"
+    image_id: "{{ rhel9_ami_id }}"
+    key_name: "{{ key_pair_name }}"
+    vpc_subnet_id: "{{ subnet.subnet.id }}"
+    security_group: "{{ sg.group_id }}"
+    network:
+      assign_public_ip: true
+    volumes:
+      - device_name: /dev/sda1
+        ebs:
+          volume_size: 30
+          volume_type: gp3
+          delete_on_termination: true
+    tags:
+      Project: "{{ project_tag }}"
+      Role: puppet-master
+    wait: true
+    state: running
+  register: puppet_master_instance
+  delegate_to: localhost
+  become: false
+
+- name: Launch Puppet agent EC2 instance(s)
+  amazon.aws.ec2_instance:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    region: "{{ aws_region }}"
+    name: "{{ project_tag }}-agent-{{ item }}"
+    instance_type: "{{ puppet_agent_instance_type }}"
+    image_id: "{{ rhel9_ami_id }}"
+    key_name: "{{ key_pair_name }}"
+    vpc_subnet_id: "{{ subnet.subnet.id }}"
+    security_group: "{{ sg.group_id }}"
+    network:
+      assign_public_ip: true
+    volumes:
+      - device_name: /dev/sda1
+        ebs:
+          volume_size: 20
+          volume_type: gp3
+          delete_on_termination: true
+    tags:
+      Project: "{{ project_tag }}"
+      Role: puppet-agent
+    wait: true
+    state: running
+  loop: "{{ range(1, puppet_agent_count + 1) | list }}"
+  register: puppet_agent_instances
+  delegate_to: localhost
+  become: false
+
+- name: Set puppet master facts
+  ansible.builtin.set_fact:
+    puppet_master_public_ip: "{{ puppet_master_instance.instances[0].public_ip_address }}"
+    puppet_master_private_ip: "{{ puppet_master_instance.instances[0].private_ip_address }}"
+
+- name: Build list of agent IPs
+  ansible.builtin.set_fact:
+    puppet_agent_ips: "{{ puppet_agent_instances.results | map(attribute='instances') | map('first') | map(attribute='public_ip_address') | list }}"
+    puppet_agent_private_ips: "{{ puppet_agent_instances.results | map(attribute='instances') | map('first') | map(attribute='private_ip_address') | list }}"
+
+- name: Add puppet master to inventory
+  ansible.builtin.add_host:
+    hostname: "{{ puppet_master_public_ip }}"
+    groups: puppet_master
+    ansible_user: ec2-user
+    ansible_ssh_private_key_file: "~/.ssh/{{ key_pair_name }}"
+    private_ip: "{{ puppet_master_private_ip }}"
+    puppet_role: master
+
+- name: Add puppet agents to inventory
+  ansible.builtin.add_host:
+    hostname: "{{ item }}"
+    groups: puppet_agents
+    ansible_user: ec2-user
+    ansible_ssh_private_key_file: "~/.ssh/{{ key_pair_name }}"
+    private_ip: "{{ puppet_agent_private_ips[idx] }}"
+    puppet_role: agent
+  loop: "{{ puppet_agent_ips }}"
+  loop_control:
+    index_var: idx
+
+- name: Create Route53 DNS record for puppet master
+  amazon.aws.route53:
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    zone: "{{ aws_route53_domain }}"
+    hosted_zone_id: "{{ aws_route53_zone_id }}"
+    record: "{{ puppet_master_fqdn }}"
+    type: A
+    ttl: 60
+    value: "{{ puppet_master_public_ip }}"
+    state: present
+    overwrite: true
+  delegate_to: localhost
+  become: false
+
+- name: Display infrastructure summary
+  ansible.builtin.debug:
+    msg: |
+      ===== Infrastructure Deployed =====
+      Puppet Master: {{ puppet_master_public_ip }} ({{ puppet_master_private_ip }})
+      Puppet Agents: {{ puppet_agent_ips | join(', ') }}
+      DNS: {{ puppet_master_fqdn }} -> {{ puppet_master_public_ip }}
+      AMI: {{ rhel9_ami_id }}
+      ====================================
+
+- name: Wait for SSH to become available on all instances
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: 22
+    delay: 10
+    timeout: 300
+    state: started
+  loop: "{{ [puppet_master_public_ip] + puppet_agent_ips }}"
+  delegate_to: localhost
+  become: false

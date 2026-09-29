@@ -1,0 +1,8 @@
+---
+# configure_puppet_master.yml — Install and configure Puppet Server
+- name: Configure Puppet Master
+  hosts: puppet_master
+  gather_facts: true
+
+  roles:
+    - puppet_master

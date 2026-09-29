@@ -1,0 +1,13 @@
+[main]
+certname = {{ puppet_master_fqdn }}
+server = {{ puppet_master_fqdn }}
+environment = production
+
+[server]
+vardir = /opt/puppetlabs/server/data/puppetserver
+logdir = /var/log/puppetlabs/puppetserver
+rundir = /var/run/puppetlabs/puppetserver
+pidfile = /var/run/puppetlabs/puppetserver/puppetserver.pid
+codedir = /etc/puppetlabs/code
+
+dns_alt_names = {{ puppet_master_fqdn }},{{ puppet_master_hostname }},puppet,{{ private_ip }}
