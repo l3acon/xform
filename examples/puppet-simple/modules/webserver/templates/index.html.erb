@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xform — Puppet Managed</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; color: #1a1a1a; }
+        h1 { color: #b00; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+        .meta { color: #666; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <h1>Hello from Puppet!</h1>
+    <p>This page is managed by <strong>Puppet</strong> on <code><%= @fqdn %></code>.</p>
+    <p class="meta">
+        OS: <%= @operatingsystem %> <%= @operatingsystemrelease %><br>
+        Managed by: xform puppet-simple example
+    </p>
+</body>
+</html>

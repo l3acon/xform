@@ -1,0 +1,10 @@
+# Puppet Simple Example — httpd webserver
+#
+# Installs Apache httpd, deploys a basic index page, opens the firewall,
+# and ensures the service is running.
+#
+# Usage (standalone):
+#   puppet apply manifests/site.pp --modulepath=modules
+#
+# Usage (via Ansible — recommended):
+#   ansible-playbook -i inventory.ini apply.yml

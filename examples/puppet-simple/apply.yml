@@ -1,0 +1,88 @@
+---
+# apply.yml — Push puppet code to agent nodes and run puppet apply
+#
+# Usage:
+#   ansible-playbook -i inventory.ini apply.yml
+#
+# Populate inventory.ini [puppet_agents] with your target host IPs first.
+# You can grab them from the infra deploy output or AWS console.
+
+- name: Open HTTP/HTTPS in the AWS security group
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Ensure port 80 and 443 are open in the security group
+      amazon.aws.ec2_security_group:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{ aws_region }}"
+        name: "{{ project_tag }}-sg"
+        description: "Security group for Puppet master and agents"
+        purge_rules: false
+        rules:
+          - proto: tcp
+            ports: 80
+            cidr_ip: "0.0.0.0/0"
+            rule_desc: "HTTP"
+          - proto: tcp
+            ports: 443
+            cidr_ip: "0.0.0.0/0"
+            rule_desc: "HTTPS"
+
+- name: Apply Puppet simple example to agent nodes
+  hosts: puppet_agents
+  become: true
+  gather_facts: false
+
+  vars:
+    puppet_code_dest: /opt/puppet-simple
+
+  tasks:
+    - name: Ensure puppet-agent is installed
+      ansible.builtin.dnf:
+        name: puppet-agent
+        state: present
+
+    - name: Create puppet code directory on target
+      ansible.builtin.file:
+        path: "{{ puppet_code_dest }}"
+        state: directory
+        mode: "0755"
+
+    - name: Sync puppet code to target
+      ansible.posix.synchronize:
+        src: "{{ playbook_dir }}/"
+        dest: "{{ puppet_code_dest }}/"
+        rsync_opts:
+          - "--exclude=inventory.ini"
+          - "--exclude=apply.yml"
+          - "--exclude=README"
+          - "--exclude=.*.swp"
+        delete: true
+
+    - name: Run puppet apply
+      ansible.builtin.command:
+        cmd: >-
+          /opt/puppetlabs/bin/puppet apply
+          {{ puppet_code_dest }}/manifests/site.pp
+          --modulepath={{ puppet_code_dest }}/modules
+      register: puppet_apply
+      changed_when: puppet_apply.rc == 2
+      failed_when: puppet_apply.rc not in [0, 2]
+
+    - name: Show puppet apply output
+      ansible.builtin.debug:
+        var: puppet_apply.stdout_lines
+
+    - name: Verify httpd is serving content
+      ansible.builtin.uri:
+        url: "http://{{ inventory_hostname }}/"
+        return_content: true
+      register: web_check
+      delegate_to: localhost
+      become: false
+
+    - name: Display verification result
+      ansible.builtin.debug:
+        msg: "Web server is live — title: {{ web_check.content | regex_search('<title>(.*?)</title>', '\\1') | first }}"
