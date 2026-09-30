@@ -1,0 +1,28 @@
+# Managed by Puppet — profile::web vhost
+<% vhost = @vhosts[@name] -%>
+<VirtualHost *:<%= vhost['port'] || @http_port %>>
+    ServerName <%= vhost['servername'] %>
+    DocumentRoot <%= vhost['docroot'] || @docroot %>
+
+    <Directory "<%= vhost['docroot'] || @docroot %>">
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+<% if vhost['proxy_pass'] && !vhost['proxy_pass'].empty? -%>
+    # Reverse proxy rules
+<% vhost['proxy_pass'].each do |proxy| -%>
+    ProxyPass <%= proxy['path'] %> <%= proxy['url'] %>
+    ProxyPassReverse <%= proxy['path'] %> <%= proxy['url'] %>
+<% end -%>
+<% end -%>
+
+<% if vhost['ssl'] -%>
+    SSLEngine on
+    SSLCertificateFile /etc/pki/tls/certs/<%= vhost['servername'] %>.crt
+    SSLCertificateKeyFile /etc/pki/tls/private/<%= vhost['servername'] %>.key
+<% end -%>
+
+    ErrorLog "logs/<%= @name.downcase.gsub(/[^a-z0-9]/, '_') %>-error_log"
+    CustomLog "logs/<%= @name.downcase.gsub(/[^a-z0-9]/, '_') %>-access_log" combined
+</VirtualHost>

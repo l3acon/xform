@@ -1,0 +1,14 @@
+---
+# Per-node override for web01
+profile::web::vhosts:
+  xform-app:
+    servername: web01.sandbox1359.opentlc.com
+    docroot: /var/www/html
+    port: 80
+    proxy_pass:
+      - path: /api
+        url: "http://localhost:8080/api"
+    ssl: false
+
+profile::app::environment: staging
+profile::app::log_level: debug

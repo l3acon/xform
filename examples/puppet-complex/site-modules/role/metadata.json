@@ -1,0 +1,10 @@
+{
+  "name": "xform-role",
+  "version": "1.0.0",
+  "summary": "Role classes for xform puppet-complex example",
+  "author": "xform",
+  "license": "MIT",
+  "dependencies": [
+    {"name": "xform/profile", "version_requirement": ">= 1.0.0"}
+  ]
+}

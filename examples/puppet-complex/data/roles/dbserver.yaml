@@ -1,0 +1,7 @@
+---
+# Database server role
+profile::database::listen_addresses: "*"
+profile::database::max_connections: 200
+profile::database::shared_buffers: "1GB"
+profile::security::allowed_ssh_networks:
+  - "10.0.0.0/8"

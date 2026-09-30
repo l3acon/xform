@@ -1,0 +1,23 @@
+# Managed by Puppet — profile::app
+---
+spring:
+  application:
+    name: <%= @app_name %>
+  profiles:
+    active: <%= @environment %>
+
+server:
+  port: <%= @app_port %>
+
+logging:
+  level:
+    root: <%= @log_level.upcase %>
+
+datasource:
+  url: "jdbc:postgresql://<%= @database_host %>:<%= @database_port %>/<%= @database_name %>"
+  driver-class-name: org.postgresql.Driver
+<% unless @database_host.nil? || @database_host == 'localhost' -%>
+  hikari:
+    connection-timeout: 30000
+    maximum-pool-size: 20
+<% end -%>

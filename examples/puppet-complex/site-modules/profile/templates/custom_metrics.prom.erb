@@ -1,0 +1,7 @@
+# Managed by Puppet — profile::monitoring custom metrics
+# TYPE metric_name help_text
+<% @custom_metrics.each do |metric| -%>
+# HELP <%= metric['name'] %> <%= metric['help'] %>
+# TYPE <%= metric['name'] %> <%= metric['type'] %>
+<%= metric['name'] %> 0
+<% end -%>

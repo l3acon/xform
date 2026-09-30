@@ -1,0 +1,10 @@
+{
+  "name": "xform-profile",
+  "version": "1.0.0",
+  "summary": "Site-specific profiles for xform puppet-complex example",
+  "author": "xform",
+  "license": "MIT",
+  "dependencies": [
+    {"name": "puppetlabs/stdlib", "version_requirement": ">= 6.0.0"}
+  ]
+}

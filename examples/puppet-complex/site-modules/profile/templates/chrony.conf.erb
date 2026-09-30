@@ -1,0 +1,9 @@
+# Managed by Puppet — profile::base
+<% @ntp_servers.each do |server| -%>
+server <%= server %> iburst
+<% end -%>
+
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync
+logdir /var/log/chrony

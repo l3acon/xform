@@ -1,0 +1,21 @@
+# Managed by Puppet — profile::web
+ServerRoot "<%= @config_dir %>"
+Listen <%= @http_port %>
+ServerTokens <%= @server_tokens %>
+ServerName <%= @fqdn %>
+
+KeepAlive On
+MaxKeepAliveRequests <%= @max_keepalive_requests %>
+KeepAliveTimeout <%= @keepalive_timeout %>
+
+DocumentRoot "<%= @docroot %>"
+
+<Directory "<%= @docroot %>">
+    AllowOverride None
+    Require all granted
+</Directory>
+
+ErrorLog "logs/error_log"
+CustomLog "logs/<%= @hostname.downcase %>-access_log" combined
+
+IncludeOptional conf.d/*.conf

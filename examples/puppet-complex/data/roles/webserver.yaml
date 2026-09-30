@@ -1,0 +1,18 @@
+---
+# Webserver role — web + app + monitoring
+profile::web::vhosts:
+  xform-app:
+    servername: "app.%{facts.domain}"
+    docroot: /var/www/html
+    port: 80
+    proxy_pass:
+      - path: /api
+        url: "http://localhost:8080/api"
+    ssl: false
+
+profile::app::log_level: warn
+profile::app::java_opts: "-Xms512m -Xmx1024m"
+profile::monitoring::custom_metrics:
+  - name: http_requests_total
+    type: counter
+    help: "Total HTTP requests"

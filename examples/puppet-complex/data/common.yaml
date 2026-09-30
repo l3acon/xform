@@ -1,0 +1,62 @@
+---
+# Common defaults — lowest priority in hierarchy
+
+# Profile: Base
+profile::base::ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+profile::base::timezone: UTC
+profile::base::manage_firewall: true
+profile::base::admin_users:
+  - name: deployer
+    ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKey deployer@xform"
+    groups:
+      - wheel
+      - adm
+
+# Profile: Web
+profile::web::http_port: 80
+profile::web::https_port: 443
+profile::web::docroot: /var/www/html
+profile::web::max_keepalive_requests: 100
+profile::web::keepalive_timeout: 5
+profile::web::server_tokens: 'Prod'
+profile::web::vhosts: {}
+
+# Profile: App
+profile::app::app_name: xform-demo
+profile::app::app_user: appuser
+profile::app::app_group: appgroup
+profile::app::app_port: 8080
+profile::app::deploy_dir: /opt/apps
+profile::app::log_level: info
+profile::app::environment: production
+profile::app::java_opts: "-Xms256m -Xmx512m"
+profile::app::database_host: "localhost"
+profile::app::database_port: 5432
+profile::app::database_name: "xform"
+
+# Profile: Database
+profile::database::postgresql_version: "15"
+profile::database::listen_addresses: "localhost"
+profile::database::max_connections: 100
+profile::database::shared_buffers: "256MB"
+profile::database::databases:
+  xform:
+    owner: appuser
+    encoding: UTF8
+    locale: en_US.UTF-8
+
+# Profile: Monitoring
+profile::monitoring::enable_prometheus: true
+profile::monitoring::node_exporter_port: 9100
+profile::monitoring::custom_metrics: []
+
+# Profile: Security
+profile::security::password_max_age: 90
+profile::security::password_min_length: 12
+profile::security::selinux_mode: enforcing
+profile::security::allowed_ssh_networks:
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+profile::security::fail2ban_maxretry: 5

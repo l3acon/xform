@@ -1,0 +1,25 @@
+# Managed by Puppet — profile::app
+[Unit]
+Description=<%= @app_name %> Application
+After=network.target
+<% unless @database_host.nil? || @database_host == 'localhost' -%>
+After=postgresql.service
+Wants=postgresql.service
+<% end -%>
+
+[Service]
+Type=simple
+User=<%= @app_user %>
+Group=<%= @app_group %>
+WorkingDirectory=<%= @deploy_dir %>
+ExecStart=/usr/bin/java <%= @java_opts %> -jar <%= @deploy_dir %>/bin/<%= @app_name %>.jar --spring.config.location=<%= @deploy_dir %>/config/
+Restart=always
+RestartSec=10
+StandardOutput=append:<%= @deploy_dir %>/logs/<%= @app_name %>.log
+StandardError=append:<%= @deploy_dir %>/logs/<%= @app_name %>.error.log
+
+Environment="JAVA_OPTS=<%= @java_opts %>"
+Environment="APP_ENV=<%= @environment %>"
+
+[Install]
+WantedBy=multi-user.target
