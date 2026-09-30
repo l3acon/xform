@@ -1,0 +1,46 @@
+---
+# apply.yml — Apply the ansible-simple role (translated from puppet-simple)
+#
+# Usage:
+#   ansible-playbook apply.yml
+#
+# This is the Ansible equivalent of running:
+#   puppet apply manifests/site.pp --modulepath=modules
+
+- name: Ensure HTTP/HTTPS open in AWS security group
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Open port 80 and 443 in security group
+      amazon.aws.ec2_security_group:
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        region: "{{ aws_region }}"
+        name: "{{ project_tag }}-sg"
+        description: "Security group for Puppet master and agents"
+        purge_rules: false
+        rules:
+          - proto: tcp
+            ports: 80
+            cidr_ip: "0.0.0.0/0"
+            rule_desc: "HTTP"
+          - proto: tcp
+            ports: 443
+            cidr_ip: "0.0.0.0/0"
+            rule_desc: "HTTPS"
+
+- name: Apply ansible-simple webserver role
+  hosts: webservers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Include webserver tasks
+      ansible.builtin.include_tasks: tasks/main.yml
+
+  handlers:
+    - name: restart httpd
+      ansible.builtin.systemd:
+        name: httpd
+        state: restarted

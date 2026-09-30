@@ -1,0 +1,7 @@
+---
+# handlers/main.yml — Replaces Puppet's subscribe => File['/var/www/html/index.html']
+
+- name: restart httpd
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted

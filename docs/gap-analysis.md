@@ -1,8 +1,9 @@
 # xform — Gap Analysis: Puppet → Ansible Translation Pipeline
 
-> **Date:** 2026-09-29
+> **Date:** 2026-09-29 | **Revised:** 2026-09-30
 > **Status:** Planning
 > **Context:** Using rgctl as the completeness backbone for translating Puppet to Ansible
+> **rgctl version:** v0.4.16 (2026-09-23)
 
 ## Executive Summary
 
@@ -10,9 +11,88 @@ rgctl's plugin API already defines Puppet and Ansible symbol types (`PuppetModul
 
 Five gaps must be closed before the pipeline can guarantee full translation coverage.
 
+### Re-assessment (2026-09-30)
+
+rgctl `lang-support` branch (upstream) adds **Puppet as a Tier 1 language** using `tree-sitter-puppet`. The plugin extracts:
+- `PuppetResource` — all resource declarations with type + title
+- `PuppetClass` — class definitions with parameters and fields
+- `PuppetDefinedType` — defined resource types
+- `PuppetNode` — node definitions
+- `PuppetVariable` — variable assignments
+- `PuppetModule` — module metadata from `metadata.json`
+- Relations: `IncludesClass`, `InheritsClass`, `RequiresResource`, `UsesFact`, `DependsOnModule`, `Calls`, `References`
+- CFG host functions for class/define/node bodies
+- Complexity metrics (cyclomatic, cognitive, nesting)
+
+Also added: **Kotlin** and **Groovy** Tier 1 plugins, plus new relation types across the plugin API.
+
+**Testing against `examples/puppet-simple/manifests/site.pp`:** rgctl now extracts **15 nodes and 34 edges** from the single `.pp` file — all 8 resource declarations, their dependency relationships (`require`, `subscribe`, `notify`), function calls (`template()`), and resource references.
+
+#### Updated gap status for puppet-simple
+
+| Gap | Status | Details |
+|---|---|---|
+| **Gap 1: `.pp` parsing** | **✅ CLOSED** | rgctl Puppet Tier 1 plugin — full extraction working |
+| **Gap 2: ERB→Jinja2** | **BLOCKING** | `index.html.erb` uses `@fqdn`, `@operatingsystem`, `@operatingsystemrelease` |
+| Gap 3: Hiera | Not needed | puppet-simple has no Hiera data |
+| Gap 4: Facter facts | **Partially needed** | ERB template uses 3 built-in facts — a small static mapping suffices |
+| Gap 5: Custom types | Not needed | puppet-simple uses only built-in resource types |
+
+### Revised Plan: puppet-simple Translation
+
+The fastest path to translate `examples/puppet-simple` → `examples/ansible-simple`:
+
+1. **Parse `site.pp` manually or with tree-sitter-puppet Python bindings** — extract the 8 resource declarations and their dependency graph
+2. **Translate ERB → Jinja2** — the template uses 3 variables, all simple `<%= @var %>` expressions
+3. **Map the 3 Facter facts** used in the template to Ansible facts
+4. **Generate the Ansible role** from the extracted resource graph
+
+This bypasses the need for an rgctl Puppet plugin for now, while we can build the plugin in parallel for the general case.
+
+#### Resource Graph for puppet-simple
+
+```
+package['httpd'] ──────────────────┐
+  ↓ (require)                      │
+file['/var/www/html/index.html'] ──┤── subscribe ──→ service['httpd']
+  ↓ (template)                     │
+webserver/index.html.erb           │
+                                   │
+package['firewalld'] ──────────────┤
+  ↓ (require)                      │
+service['firewalld'] ──────────────┤
+  ↓ (require)                      │
+exec['firewall-allow-http'] ───────┤── notify ──→ exec['firewall-reload']
+exec['firewall-allow-https'] ──────┘── notify ──→ exec['firewall-reload']
+```
+
+#### Puppet → Ansible Mapping for this example
+
+| Puppet Resource | Ansible Equivalent |
+|---|---|
+| `package { 'httpd': ensure => installed }` | `ansible.builtin.dnf: name=httpd state=present` |
+| `package { 'firewalld': ensure => installed }` | `ansible.builtin.dnf: name=firewalld state=present` |
+| `file { '/var/www/html/index.html': content => template(...) }` | `ansible.builtin.template: src=index.html.j2 dest=/var/www/html/index.html` |
+| `service { 'httpd': ensure => running, enable => true }` | `ansible.builtin.systemd: name=httpd state=started enabled=true` |
+| `service { 'firewalld': ensure => running, enable => true }` | `ansible.builtin.systemd: name=firewalld state=started enabled=true` |
+| `exec { 'firewall-allow-http': unless => ... }` | `ansible.posix.firewalld: service=http permanent=true immediate=true` |
+| `exec { 'firewall-allow-https': unless => ... }` | `ansible.posix.firewalld: service=https permanent=true immediate=true` |
+| `exec { 'firewall-reload': refreshonly => true }` | *(eliminated — `ansible.posix.firewalld` with `immediate: true` reloads automatically)* |
+| `subscribe => File[...]` | `notify: restart httpd` handler |
+
+#### ERB → Jinja2 Mapping for this example
+
+| ERB | Jinja2 | Notes |
+|---|---|---|
+| `<%= @fqdn %>` | `{{ ansible_fqdn }}` | Built-in fact |
+| `<%= @operatingsystem %>` | `{{ ansible_distribution }}` | Built-in fact |
+| `<%= @operatingsystemrelease %>` | `{{ ansible_distribution_version }}` | Built-in fact |
+
 ---
 
-## Gap 1: Puppet Manifest (`.pp`) Parsing
+## Gap 1: Puppet Manifest (`.pp`) Parsing — ✅ CLOSED
+
+> **Resolved in rgctl `lang-support` branch** — `crates/rgctl-lang-puppet` implements a full Tier 1 `LanguagePlugin` using `tree-sitter-puppet` v1.3.0. Registered in `languages.toml` and `crates/rgctl-languages/src/lib.rs`. Extracts `PuppetResource`, `PuppetClass`, `PuppetDefinedType`, `PuppetNode`, `PuppetVariable`, `PuppetModule` symbols and `IncludesClass`, `InheritsClass`, `RequiresResource`, `UsesFact`, `DependsOnModule`, `Calls`, `References` relations. CFG/complexity analysis works on class/define/node bodies. Verified on `examples/puppet-simple`: 15 nodes, 34 edges from `site.pp`.
 
 ### Problem
 
@@ -403,15 +483,27 @@ Option A (graph-assisted LLM translation) for custom types/providers, combined w
 
 ## Implementation Priority
 
+### For puppet-simple (immediate)
+
+| Step | Task | Effort | Status |
+|---|---|---|---|
+| **1** | Parse `site.pp` with rgctl Puppet plugin | Done | ✅ 15 nodes, 34 edges |
+| **2** | Convert `index.html.erb` → `index.html.j2` (3 variable substitutions) | 15min | Pending |
+| **3** | Map 3 Facter facts to Ansible equivalents | 5min | Pending |
+| **4** | Generate Ansible role from graph + write `apply.yml` | 30min | Pending |
+| **5** | Deploy and verify on live agent | 15min | Pending |
+
+### For general pipeline (parallel track)
+
 | Priority | Gap | Effort | Impact |
 |---|---|---|---|
-| **1 (HIGH)** | Gap 1: Puppet `.pp` plugin | 2–3d | Unlocks the entire pipeline |
-| **2 (HIGH)** | Gap 4: Fact mapping table | 2d | Used by every other gap |
-| **3 (MED)** | Gap 2: ERB→Jinja2 tool | 2d | Deterministic, high coverage |
-| **4 (MED)** | Gap 3: Hiera mapper | 3–4d | Complex but well-scoped |
-| **5 (LOW)** | Gap 5: Type/provider translation | 1–2d+ | Per-module LLM-assisted work |
+| ~~**1 (HIGH)**~~ | ~~Gap 1: Puppet `.pp` plugin for rgctl~~ | ~~2–3d~~ | ✅ **DONE** |
+| **1 (HIGH)** | Gap 4: Fact mapping table | 2d | Used by every other gap |
+| **2 (MED)** | Gap 2: ERB→Jinja2 tool | 2d | Deterministic, high coverage |
+| **3 (MED)** | Gap 3: Hiera mapper | 3–4d | Complex but well-scoped |
+| **4 (LOW)** | Gap 5: Type/provider translation | 1–2d+ | Per-module LLM-assisted work |
 
-**Total estimated effort for tooling: ~10–13 days**
+**Remaining estimated effort for general tooling: ~7–10 days**
 *(Gap 5 effort is per-module and depends on module complexity)*
 
 ---
