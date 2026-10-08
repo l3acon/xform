@@ -9,7 +9,7 @@ profile::base::timezone: UTC
 profile::base::manage_firewall: true
 profile::base::admin_users:
   - name: deployer
-    ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKey deployer@xform"
+    ssh_key: "REPLACE_WITH_ACTUAL_KEY"
     groups:
       - wheel
       - adm

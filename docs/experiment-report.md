@@ -1,8 +1,8 @@
 # xform — Puppet to Ansible Translation: Findings Report
 
-> **Period:** 2026-09-29 – 2026-10-05
+> **Period:** 2026-09-29 – 2026-10-08
 > **Authors:** Matt Fernandez
-> **Status:** Two examples translated, rgctl plugins submitted upstream, awaiting live deployment verification
+> **Status:** Both examples deployed and verified on live infrastructure
 
 ---
 
@@ -81,7 +81,7 @@ No performance regression on the Linux kernel Gate A (zero `.erb` files — the 
 - `subscribe` → `notify:` handler
 - `<%= @fqdn %>` → `{{ ansible_fqdn }}`
 
-**Status:** ✅ Syntax check passes. Deployed and verified on live agent (web server served translated page). Agent node auto-stopped with sandbox — re-deploy to re-verify.
+**Status:** ✅ Syntax check passes. Deployed and verified on live agent — web server serves translated page with correct facts.
 
 ### 5.2 Complex Example: `puppet-complex` → `ansible-complex`
 
@@ -115,7 +115,14 @@ No performance regression on the Linux kernel Gate A (zero `.erb` files — the 
 | Puppet ordering arrows | `Class[a] -> Class[b] -> Class[c]` | Role ordering in play's `roles:` list |
 | Hiera-driven classification | `lookup('role')` → `case` in site.pp | Inventory groups → play `hosts:` |
 
-**Status:** ✅ Syntax check passes. Awaiting live infrastructure to deploy and verify end-to-end.
+**Status:** ✅ Deployed and verified on live infrastructure (2026-10-08):
+- 43 tasks ok, 0 failed
+- httpd, firewalld, chronyd, fail2ban, sshd all active
+- Firewall: HTTP, HTTPS, app port 8080, monitoring port 9100 all open
+- SELinux: enforcing
+- Application directories, systemd unit, chrony config all deployed
+- Web page served with correct Ansible facts (RedHat 9.6, hostname, IP, memory, environment)
+- node_exporter: gracefully skipped (package not in default repos; non-blocking)
 
 ## 6. Gap Analysis Status
 
@@ -185,9 +192,8 @@ xform/
 
 ## 10. Next Steps
 
-1. **Re-provision AWS sandbox** and deploy both `ansible-simple` and `ansible-complex` for live verification
+1. **Test on a real-world Puppet codebase** (e.g., theforeman modules) to validate at scale
 2. **Build automated fact mapping table** (`fact-map.yml`, ~100 entries) for the ERB plugin
 3. **Build Hiera hierarchy mapper** tool for enterprise-scale codebases
-4. **Test on a real-world Puppet codebase** (e.g., theforeman modules) to validate at scale
-5. **Upstream ERB plugin** — address any remaining PR feedback on [sshaaf/rgctl#101](https://github.com/sshaaf/rgctl/pull/101)
-6. **Automate end-to-end** — script that runs `rgctl discover` → extracts graph → generates Ansible role scaffolding
+4. **Upstream ERB plugin** — address any remaining PR feedback on [sshaaf/rgctl#101](https://github.com/sshaaf/rgctl/pull/101)
+5. **Automate end-to-end** — script that runs `rgctl discover` → extracts graph → generates Ansible role scaffolding

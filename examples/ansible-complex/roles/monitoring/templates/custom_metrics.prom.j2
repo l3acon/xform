@@ -1,0 +1,6 @@
+# Managed by Ansible — custom metrics
+{% for metric in custom_metrics %}
+# HELP {{ metric.name }} {{ metric.help }}
+# TYPE {{ metric.name }} {{ metric.type }}
+{{ metric.name }} 0
+{% endfor %}

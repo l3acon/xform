@@ -1,0 +1,15 @@
+# Managed by Ansible — SSH hardening
+PermitRootLogin no
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding no
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+{% if allowed_ssh_networks is defined and allowed_ssh_networks | length > 0 %}
+# Allowed networks
+{% for network in allowed_ssh_networks %}
+# AllowFrom {{ network }}
+{% endfor %}
+{% endif %}

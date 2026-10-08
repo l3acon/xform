@@ -1,0 +1,23 @@
+---
+# Translated from data/os/RedHat.yaml
+package_provider: dnf
+firewall_provider: firewalld
+extra_packages:
+  - vim-enhanced
+  - tmux
+  - jq
+  - chrony
+
+web_package_name: httpd
+web_service_name: httpd
+web_config_dir: /etc/httpd
+web_modules_dir: /etc/httpd/conf.modules.d
+ssl_package: mod_ssl
+
+db_package_name: postgresql-server
+db_service_name: postgresql
+db_data_dir: /var/lib/pgsql/data
+db_config_file: /var/lib/pgsql/data/postgresql.conf
+db_hba_file: /var/lib/pgsql/data/pg_hba.conf
+
+node_exporter_package: node_exporter

@@ -1,0 +1,63 @@
+---
+# Translated from data/common.yaml
+# Puppet keys flattened: profile::base::ntp_servers → ntp_servers
+
+# Base
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+timezone: UTC
+manage_firewall: true
+admin_users:
+  - name: deployer
+    ssh_key: "{{ vault_deployer_ssh_key }}"
+    groups:
+      - wheel
+      - adm
+
+# Web
+http_port: 80
+https_port: 443
+docroot: /var/www/html
+max_keepalive_requests: 100
+keepalive_timeout: 5
+server_tokens: Prod
+vhosts: {}
+
+# App
+app_name: xform-demo
+app_user: appuser
+app_group: appgroup
+app_port: 8080
+deploy_dir: /opt/apps
+log_level: info
+app_environment: production
+java_opts: "-Xms256m -Xmx512m"
+database_host: localhost
+database_port: 5432
+database_name: xform
+
+# Database
+postgresql_version: "15"
+listen_addresses: localhost
+max_connections: 100
+shared_buffers: 256MB
+databases:
+  xform:
+    owner: appuser
+    encoding: UTF8
+    locale: en_US.UTF-8
+
+# Monitoring
+enable_prometheus: true
+node_exporter_port: 9100
+custom_metrics: []
+
+# Security
+password_max_age: 90
+password_min_length: 12
+selinux_mode: enforcing
+allowed_ssh_networks:
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+fail2ban_maxretry: 5

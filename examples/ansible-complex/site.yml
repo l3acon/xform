@@ -1,0 +1,28 @@
+---
+# site.yml — translated from manifests/site.pp + role classes
+#
+# Puppet roles → Ansible plays:
+#   role::webserver → base, security, web, app, monitoring
+#   role::dbserver  → base, security, database, monitoring
+#   role::base      → base, security, monitoring
+
+- name: Configure webservers (role::webserver)
+  hosts: webserver
+  become: true
+  gather_facts: true
+  roles:
+    - base
+    - security
+    - web
+    - app
+    - monitoring
+
+- name: Configure database servers (role::dbserver)
+  hosts: dbserver
+  become: true
+  gather_facts: true
+  roles:
+    - base
+    - security
+    - database
+    - monitoring

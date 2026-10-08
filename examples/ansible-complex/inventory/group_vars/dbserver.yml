@@ -1,0 +1,7 @@
+---
+# Translated from data/roles/dbserver.yaml
+listen_addresses: "*"
+max_connections: 200
+shared_buffers: 1GB
+allowed_ssh_networks:
+  - "10.0.0.0/8"

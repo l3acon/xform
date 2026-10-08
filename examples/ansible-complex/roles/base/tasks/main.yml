@@ -1,0 +1,59 @@
+---
+# roles/base — translated from profile::base
+- name: Set timezone
+  ansible.builtin.file:
+    src: "/usr/share/zoneinfo/{{ timezone }}"
+    dest: /etc/localtime
+    state: link
+
+- name: Install chrony
+  ansible.builtin.dnf:
+    name: chrony
+    state: present
+
+- name: Deploy chrony config
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+  notify: restart chronyd
+
+- name: Enable and start chronyd
+  ansible.builtin.systemd:
+    name: chronyd
+    enabled: true
+    state: started
+
+- name: Install extra packages
+  ansible.builtin.dnf:
+    name: "{{ extra_packages }}"
+    state: present
+  when: extra_packages | length > 0
+
+- name: Create admin users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    groups: "{{ item.groups }}"
+    create_home: true
+    shell: /bin/bash
+    state: present
+  loop: "{{ admin_users }}"
+
+- name: Add SSH keys for admin users
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.ssh_key }}"
+    state: present
+  loop: "{{ admin_users }}"
+
+- name: Install firewall
+  ansible.builtin.dnf:
+    name: "{{ firewall_provider }}"
+    state: present
+  when: manage_firewall
+
+- name: Enable and start firewall
+  ansible.builtin.systemd:
+    name: "{{ firewall_provider }}"
+    enabled: true
+    state: started
+  when: manage_firewall

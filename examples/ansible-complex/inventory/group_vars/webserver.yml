@@ -1,0 +1,18 @@
+---
+# Translated from data/roles/webserver.yaml
+vhosts:
+  xform-app:
+    servername: "app.{{ ansible_domain }}"
+    docroot: /var/www/html
+    port: 80
+    proxy_pass:
+      - path: /api
+        url: "http://localhost:8080/api"
+    ssl: false
+
+log_level: warn
+java_opts: "-Xms512m -Xmx1024m"
+custom_metrics:
+  - name: http_requests_total
+    type: counter
+    help: "Total HTTP requests"

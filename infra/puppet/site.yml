@@ -2,7 +2,7 @@
 # site.yml — End-to-end: provision infra, then configure Puppet master + agents
 #
 # Usage:
-#   ansible-playbook site.yml
+#   ansible-playbook site.yml --vault-password-file ../../.vault-password -e @../../secrets.yml
 #
 # This playbook:
 #   1. Provisions AWS infrastructure (VPC, SG, EC2 instances, DNS)
@@ -13,6 +13,8 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars_files:
+    - ../../secrets.yml
   roles:
     - infra
 

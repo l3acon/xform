@@ -1,0 +1,23 @@
+# Managed by Ansible — roles/app
+---
+spring:
+  application:
+    name: {{ app_name }}
+  profiles:
+    active: {{ app_environment }}
+
+server:
+  port: {{ app_port }}
+
+logging:
+  level:
+    root: {{ log_level | upper }}
+
+datasource:
+  url: "jdbc:postgresql://{{ database_host }}:{{ database_port }}/{{ database_name }}"
+  driver-class-name: org.postgresql.Driver
+{% if database_host is defined and database_host != 'localhost' %}
+  hikari:
+    connection-timeout: 30000
+    maximum-pool-size: 20
+{% endif %}

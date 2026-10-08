@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>xform — {{ role | default('default') }} — Ansible Managed</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; }
+        h1 { color: #06a; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+        .meta { color: #666; font-size: 0.9rem; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+        td, th { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+    </style>
+</head>
+<body>
+    <h1>xform — Ansible Complex Example</h1>
+    <p>Managed by <strong>Ansible</strong> on <code>{{ ansible_fqdn }}</code></p>
+    <table>
+        <tr><th>Fact</th><th>Value</th></tr>
+        <tr><td>Hostname</td><td>{{ ansible_hostname }}</td></tr>
+        <tr><td>OS</td><td>{{ ansible_distribution }} {{ ansible_distribution_version }}</td></tr>
+        <tr><td>OS Family</td><td>{{ ansible_os_family }}</td></tr>
+        <tr><td>IP Address</td><td>{{ ansible_default_ipv4.address }}</td></tr>
+        <tr><td>Memory</td><td>{{ ansible_memtotal_mb }} MB</td></tr>
+        <tr><td>Environment</td><td>{{ app_environment }}</td></tr>
+    </table>
+    <p class="meta">
+        App: {{ app_name }} on port {{ app_port }}<br>
+        Uptime: {{ ansible_uptime_seconds | int // 3600 }}h
+    </p>
+</body>
+</html>

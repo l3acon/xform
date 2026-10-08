@@ -1,0 +1,27 @@
+# Managed by Ansible — vhost {{ item.key }}
+<VirtualHost *:{{ item.value.port | default(http_port) }}>
+    ServerName {{ item.value.servername }}
+    DocumentRoot {{ item.value.docroot | default(docroot) }}
+
+    <Directory "{{ item.value.docroot | default(docroot) }}">
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+{% if item.value.proxy_pass is defined and item.value.proxy_pass | length > 0 %}
+    # Reverse proxy rules
+{% for proxy in item.value.proxy_pass %}
+    ProxyPass {{ proxy.path }} {{ proxy.url }}
+    ProxyPassReverse {{ proxy.path }} {{ proxy.url }}
+{% endfor %}
+{% endif %}
+
+{% if item.value.ssl | default(false) %}
+    SSLEngine on
+    SSLCertificateFile /etc/pki/tls/certs/{{ item.value.servername }}.crt
+    SSLCertificateKeyFile /etc/pki/tls/private/{{ item.value.servername }}.key
+{% endif %}
+
+    ErrorLog "logs/{{ item.key | lower | regex_replace('[^a-z0-9]', '_') }}-error_log"
+    CustomLog "logs/{{ item.key | lower | regex_replace('[^a-z0-9]', '_') }}-access_log" combined
+</VirtualHost>

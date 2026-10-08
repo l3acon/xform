@@ -1,0 +1,9 @@
+# Managed by Ansible — roles/database
+listen_addresses = '{{ listen_addresses }}'
+port = 5432
+max_connections = {{ max_connections }}
+shared_buffers = {{ shared_buffers }}
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d.log'

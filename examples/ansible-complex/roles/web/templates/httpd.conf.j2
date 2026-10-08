@@ -1,0 +1,21 @@
+# Managed by Ansible — roles/web
+ServerRoot "{{ web_config_dir }}"
+Listen {{ http_port }}
+ServerTokens {{ server_tokens }}
+ServerName {{ ansible_fqdn }}
+
+KeepAlive On
+MaxKeepAliveRequests {{ max_keepalive_requests }}
+KeepAliveTimeout {{ keepalive_timeout }}
+
+DocumentRoot "{{ docroot }}"
+
+<Directory "{{ docroot }}">
+    AllowOverride None
+    Require all granted
+</Directory>
+
+ErrorLog "logs/error_log"
+CustomLog "logs/{{ ansible_hostname | lower }}-access_log" combined
+
+IncludeOptional conf.d/*.conf

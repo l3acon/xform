@@ -1,0 +1,47 @@
+---
+# roles/monitoring — translated from profile::monitoring
+- name: Install node_exporter
+  ansible.builtin.dnf:
+    name: "{{ node_exporter_package }}"
+    state: present
+  when: enable_prometheus
+  ignore_errors: true
+  register: node_exporter_install
+
+- name: Deploy node_exporter sysconfig
+  ansible.builtin.template:
+    src: node_exporter_sysconfig.j2
+    dest: /etc/sysconfig/node_exporter
+  notify: restart node_exporter
+  when: enable_prometheus and (node_exporter_install is not failed)
+
+- name: Create textfile collector directory
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile
+    state: directory
+    owner: nobody
+    group: nobody
+    mode: "0755"
+  when: enable_prometheus and custom_metrics | length > 0
+
+- name: Deploy custom metrics
+  ansible.builtin.template:
+    src: custom_metrics.prom.j2
+    dest: /var/lib/node_exporter/textfile/custom.prom
+    owner: nobody
+  when: enable_prometheus and custom_metrics | length > 0
+
+- name: Enable and start node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    enabled: true
+    state: started
+  when: enable_prometheus and (node_exporter_install is not failed)
+
+- name: Allow node_exporter port through firewall
+  ansible.posix.firewalld:
+    port: "{{ node_exporter_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+  when: enable_prometheus

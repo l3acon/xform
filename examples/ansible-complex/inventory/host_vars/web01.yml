@@ -1,0 +1,14 @@
+---
+# Translated from data/nodes/web01.yaml
+vhosts:
+  xform-app:
+    servername: web01.sandbox1359.opentlc.com
+    docroot: /var/www/html
+    port: 80
+    proxy_pass:
+      - path: /api
+        url: "http://localhost:8080/api"
+    ssl: false
+
+app_environment: staging
+log_level: debug

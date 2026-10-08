@@ -1,0 +1,62 @@
+---
+# roles/app — translated from profile::app
+- name: Install Java 17
+  ansible.builtin.dnf:
+    name: java-17-openjdk-headless
+    state: present
+
+- name: Create application group
+  ansible.builtin.group:
+    name: "{{ app_group }}"
+    state: present
+
+- name: Create application user
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    group: "{{ app_group }}"
+    home: "{{ deploy_dir }}"
+    create_home: true
+    shell: /sbin/nologin
+
+- name: Create application directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0755"
+  loop:
+    - "{{ deploy_dir }}"
+    - "{{ deploy_dir }}/bin"
+    - "{{ deploy_dir }}/config"
+    - "{{ deploy_dir }}/logs"
+
+- name: Deploy application config
+  ansible.builtin.template:
+    src: application.yml.j2
+    dest: "{{ deploy_dir }}/config/application.yml"
+    owner: "{{ app_user }}"
+    group: "{{ app_group }}"
+    mode: "0640"
+  notify: restart app
+
+- name: Deploy systemd unit
+  ansible.builtin.template:
+    src: app.service.j2
+    dest: "/etc/systemd/system/{{ app_name }}.service"
+  notify:
+    - systemd daemon-reload
+    - restart app
+
+- name: Allow app port through firewall
+  ansible.posix.firewalld:
+    port: "{{ app_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Enable and start application
+  ansible.builtin.systemd:
+    name: "{{ app_name }}"
+    enabled: true
+    state: started

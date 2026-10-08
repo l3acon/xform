@@ -1,0 +1,53 @@
+---
+# roles/database — translated from profile::database
+- name: Install PostgreSQL server
+  ansible.builtin.dnf:
+    name: "{{ db_package_name }}"
+    state: present
+
+- name: Install PostgreSQL contrib
+  ansible.builtin.dnf:
+    name: postgresql-contrib
+    state: present
+
+- name: Initialize PostgreSQL database
+  ansible.builtin.command:
+    cmd: /usr/bin/postgresql-setup --initdb
+    creates: "{{ db_data_dir }}/PG_VERSION"
+
+- name: Deploy postgresql.conf
+  ansible.builtin.template:
+    src: postgresql.conf.j2
+    dest: "{{ db_config_file }}"
+  notify: restart postgresql
+
+- name: Deploy pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ db_hba_file }}"
+  notify: restart postgresql
+
+- name: Enable and start PostgreSQL
+  ansible.builtin.systemd:
+    name: "{{ db_service_name }}"
+    enabled: true
+    state: started
+
+- name: Allow PostgreSQL through firewall
+  ansible.posix.firewalld:
+    service: postgresql
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Create databases from inventory
+  ansible.builtin.command:
+    cmd: "createdb -O {{ item.value.owner }} -E {{ item.value.encoding }} {{ item.key }}"
+  become: true
+  become_user: postgres
+  loop: "{{ databases | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: db_create
+  changed_when: db_create.rc == 0
+  failed_when: db_create.rc != 0 and 'already exists' not in db_create.stderr

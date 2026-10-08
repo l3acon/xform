@@ -2,7 +2,7 @@
 # apply.yml — Apply the ansible-simple role (translated from puppet-simple)
 #
 # Usage:
-#   ansible-playbook apply.yml
+#   ansible-playbook apply.yml --vault-password-file ../../secrets/.vault-password -e @../../secrets.yml
 #
 # This is the Ansible equivalent of running:
 #   puppet apply manifests/site.pp --modulepath=modules

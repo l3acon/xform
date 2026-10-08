@@ -1,0 +1,63 @@
+---
+# roles/web — translated from profile::web
+- name: Install httpd
+  ansible.builtin.dnf:
+    name: "{{ web_package_name }}"
+    state: present
+
+- name: Install SSL module
+  ansible.builtin.dnf:
+    name: "{{ ssl_package }}"
+    state: present
+
+- name: Deploy httpd.conf
+  ansible.builtin.template:
+    src: httpd.conf.j2
+    dest: "{{ web_config_dir }}/conf/httpd.conf"
+  notify: restart httpd
+
+- name: Create document root
+  ansible.builtin.file:
+    path: "{{ docroot }}"
+    state: directory
+    owner: apache
+    group: apache
+    mode: "0755"
+
+- name: Deploy index.html
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ docroot }}/index.html"
+    owner: apache
+    group: apache
+    mode: "0644"
+
+- name: Deploy vhost configs
+  ansible.builtin.template:
+    src: vhost.conf.j2
+    dest: "{{ web_config_dir }}/conf.d/{{ item.key }}.conf"
+  loop: "{{ vhosts | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: restart httpd
+  when: vhosts | length > 0
+
+- name: Allow HTTP through firewall
+  ansible.posix.firewalld:
+    port: "{{ http_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow HTTPS through firewall
+  ansible.posix.firewalld:
+    port: "{{ https_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Enable and start httpd
+  ansible.builtin.systemd:
+    name: "{{ web_service_name }}"
+    enabled: true
+    state: started
