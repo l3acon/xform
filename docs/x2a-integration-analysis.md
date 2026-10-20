@@ -63,13 +63,14 @@ before any translation begins. The pipeline is:
 rgctl discover (index codebase -> knowledge graph)
   -> Query graph (resource inventory, variable provenance, dependency chains)
     -> Tiered translation (T1-T4: regex -> rules -> filters -> LLM fallback)
-      -> Verify (cross-reference graph nodes against output)
+      -> Check coverage (cross-reference graph nodes against output)
 ```
 
 The LLM is invoked only for Tier 4 blocks (~5% of ERB constructs) where Ruby
-expressions are too complex for deterministic rules. The graph provides
-completeness guarantees: if a node exists in the source graph, it must appear
-in the output.
+expressions are too complex for deterministic rules. Graph coverage helps
+detect omissions by checking that source elements captured by the parser are
+accounted for in the output. Its strength depends on parser coverage and the
+accuracy of source-to-output mappings; it does not prove equivalent behavior.
 
 See [experiment-report.md](experiment-report.md) and
 [gap-analysis.md](gap-analysis.md) for full details.
@@ -105,7 +106,7 @@ output that either project produces.
 | Dimension | **x2a** | **xform** | **APME** |
 |---|---|---|---|
 | **Source of truth** | LLM extracts structure via prompts | rgctl knowledge graph (deterministic) | ContentGraph from YAML parse |
-| **Completeness signal** | GoalValidationMiddleware checks if LLM believes it finished | Graph node coverage verifies nothing was omitted | 6 parallel validators with rescan |
+| **Completeness signal** | GoalValidationMiddleware checks if LLM believes it finished | Graph coverage flags unaccounted-for source elements within parser coverage | 6 parallel validators with rescan |
 | **LLM role** | Central — analysis, translation, and generation | Fallback — ~5% of ERB blocks, Ruby-to-Python custom types | Optional — Tier 2 remediation only |
 | **Determinism** | Non-deterministic (LLM generates fresh each run) | ~95% deterministic (tiered rule-based translation) | Tier 1 fully deterministic; Tier 2 non-deterministic |
 
@@ -165,7 +166,7 @@ Similarly for template analysis:
 | | **x2a** | **xform** | **APME** |
 |---|---|---|---|
 | **Syntactic** | ansible-lint with LLM retry loop (up to 5 attempts) | N/A (manual verification) | 6 parallel validators, convergence loop rescan |
-| **Semantic** | `GoalValidationMiddleware` asks LLM if goal was met | Graph node coverage (every source node must map to output) | N/A (validates Ansible, not translation fidelity) |
+| **Semantic** | `GoalValidationMiddleware` asks LLM if goal was met | Graph coverage detects potential omissions among parsed source elements; it does not prove behavioral equivalence | N/A (validates Ansible, not translation fidelity) |
 | **Functional** | None | Deploy to live infrastructure (AWS sandbox) | None (static analysis only) |
 
 ---
@@ -261,13 +262,20 @@ required LLM fallback.
 unless @x.nil? || @x.empty?  ->  {% if x is defined and x %}
 ```
 
-### 5.2 Completeness Guarantee via Graph Coverage
+### 5.2 Omission Detection via Graph Coverage
 
-After translation, xform cross-referenced every rgctl graph node against the
-Ansible output. Missing translations are detectable — the graph knows what
-should exist. This is the guarantee x2a's `GoalValidationMiddleware` cannot
-provide: it checks if the LLM *believes* it finished, not whether every source
-artifact has a corresponding output artifact.
+After translation, xform cross-referenced rgctl graph nodes against the
+Ansible output to identify source elements without a corresponding translation
+or documented disposition. This provides a structural omission check that
+complements x2a's `GoalValidationMiddleware` assessment of whether the goal
+was met.
+
+The check is bounded by parser coverage: source constructs or relationships
+that the parser misses cannot be checked through the graph. It also depends
+on accurate source-to-output mappings, including cases where multiple Puppet
+resources become one Ansible task or a resource is intentionally eliminated.
+Even accounting for every source element does not prove equivalent behavior;
+semantic review and functional testing remain necessary.
 
 ### 5.3 Idiomatic Improvements from Graph Context
 
@@ -389,7 +397,7 @@ built from graph dependency edges:
 class GraphBackedExecutionTreeBuilder:
     def build_tree(self, entry_class: str) -> ExecutionTreeNode:
         chain = self.graph.traverse_classes(entry_class)
-        # Graph traversal gives the complete, verified class chain
+        # Graph traversal follows class relationships captured by the parser
         # e.g. role::webserver -> profile::base -> profile::security
         #   -> profile::web -> profile::app -> profile::monitoring
         for cls in chain:
@@ -397,8 +405,10 @@ class GraphBackedExecutionTreeBuilder:
             # Build nodes from graph data (no LLM)
 ```
 
-The tree is provably complete — every `include`/`require` is a graph edge.
-No silent omissions from LLM inattention.
+The tree follows `include`/`require` relationships captured as graph edges,
+reducing reliance on LLM enumeration. Its coverage depends on the parser
+capturing those relationships; traversal cannot reveal edges missing from
+the graph or prove equivalent execution behavior.
 
 #### Layer 4: Deterministic Hiera Mapping
 
@@ -439,29 +449,35 @@ inconsistency — the LLM sometimes maps `@operatingsystem` to
 
 #### Layer 6: Graph Coverage Validation
 
-New validation step after the export pipeline generates Ansible code:
+New omission-detection step after the export pipeline generates Ansible code.
+The following sketch checks for output counterparts to parsed source elements:
 
 ```python
 class GraphCoverageValidator:
     def validate(self, graph, output_dir: Path) -> CoverageReport:
         uncovered = []
-        # Every PuppetResource must map to an Ansible task
+        # Flag parsed Puppet resources without a matching task
         for resource in graph.nodes(type="PuppetResource"):
             if not self._find_matching_task(resource, output_dir):
                 uncovered.append(resource)
-        # Every ERB template must have a .j2 counterpart
+        # Flag parsed ERB templates without a .j2 counterpart
         for erb in graph.nodes(type="ERBTemplate"):
             j2_name = erb.name.replace(".erb", ".j2")
             if not (output_dir / "templates" / j2_name).exists():
                 uncovered.append(erb)
-        # Every Hiera variable must appear in inventory or defaults
+        # Flag parsed variables absent from inventory or defaults
         for var in graph.nodes(type="PuppetVariable"):
             if not self._find_variable_in_ansible(var, output_dir):
                 uncovered.append(var)
         return CoverageReport(total=graph.node_count(), uncovered=uncovered)
 ```
 
-Uncovered nodes are reported back to the `WriteAgent` for targeted generation.
+Uncovered nodes are reported back to the `WriteAgent` for targeted review and
+generation. A production implementation must also record intentional
+eliminations and mappings where several source elements share an output
+artifact. A matching task, template, or variable establishes structural
+coverage only; it does not establish equivalent behavior, and constructs
+missing from the graph remain outside the check.
 
 ---
 
@@ -485,7 +501,7 @@ LLM-driven but benefits from:
 - Pre-translated `.j2` templates — `WriteAgent` receives Jinja2, not raw ERB
 - Graph-derived variable provenance included in prompt context
 - Fact mapping table for consistent substitutions
-- Coverage validation as a completeness check after generation
+- Graph coverage as an omission check after generation, bounded by parser coverage
 
 ---
 
@@ -601,7 +617,7 @@ services are used, so there is no regression risk.
 | Risk | Severity | Mitigation |
 |---|---|---|
 | **rgctl binary dependency** — Rust binary complicates Docker/CI | Medium | Subprocess wrapper (same pattern as ansible-lint). Optional: `X2A_USE_RGCTL=false` (default) requires no rgctl install |
-| **Puppet plugin coverage** — may not handle all Puppet constructs (virtual resources, collectors, complex metaparameters) | Medium | Per-file fallback to LLM-based `ManifestAnalysisService` when graph data is incomplete. Not all-or-nothing |
+| **Puppet plugin coverage** — may not handle all Puppet constructs (virtual resources, collectors, complex metaparameters); omissions from the graph are invisible to graph coverage checks | Medium | Track unsupported constructs and parser diagnostics, with per-file fallback to LLM-based `ManifestAnalysisService` when gaps are detected. Validate parser coverage against representative corpora. |
 | **ERB edge cases** — enterprise codebases may have Ruby patterns beyond T1-T3 (custom methods, inline requires) | Low | Conservative tier classification — anything not confidently T1-T3 falls to T4 (existing LLM pipeline). xform saw 0% T4 in puppet-complex, but the path exists |
 | **Graph staleness** — source files change between discover and export | Low | `rgctl discover` runs at analysis start (<2s even for large corpora). Source dir is read-only during analysis |
 | **Scope to other technologies** — this covers Puppet only | Low | Modular: each technology's `*SubAgent` independently chooses analysis backend. Other technologies continue using LLM unchanged |
@@ -612,16 +628,19 @@ services are used, so there is no regression risk.
 
 xform's experiment demonstrated that the structural extraction x2a performs via
 LLM calls — parsing manifests, classifying ERB blocks, tracing Hiera
-hierarchies, building execution trees — is work a deterministic parser handles
-with better accuracy, zero token cost, and provable completeness.
+hierarchies, building execution trees — can be handled deterministically for
+supported constructs without LLM token cost. The resulting graph supports
+omission detection within the parser's coverage.
 
 The integration path is not a rewrite. It is a **pre-analysis layer** that
-feeds verified structural data into x2a's existing agent pipeline through the
+feeds parser-derived structural data into x2a's existing agent pipeline through the
 same Pydantic interfaces. The LLM remains essential for what it does well:
 semantic translation decisions, Ansible code generation, complex Ruby-to-Python
-conversion, and creative problem-solving. The graph handles what the LLM does
-poorly: exhaustive enumeration, guaranteed completeness, and deterministic
-pattern matching.
+conversion, and creative problem-solving. The graph provides a repeatable
+inventory of parsed source elements, relationship queries, and a basis for
+detecting omissions. Accounting for every source element does not by itself
+prove equivalent behavior; semantic review and functional testing remain
+necessary.
 
 ---
 
